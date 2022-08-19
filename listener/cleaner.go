@@ -3,25 +3,32 @@ package listener
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	cron "github.com/robfig/cron/v3"
-	"github.com/sirupsen/logrus"
 )
 
-type cleaner struct {
-	m       *sync.Map
-	gauge   *prometheus.GaugeVec
-	minutes time.Duration
+type metricIdentifier struct {
+	name   string
+	labels prometheus.Labels
 }
 
-func newCleaner(gauge *prometheus.GaugeVec, minutes int) cleaner {
+type cleaner struct {
+	m          *sync.Map
+	gauges     map[string]*prometheus.GaugeVec
+	histograms map[string]*prometheus.HistogramVec
+	minutes    time.Duration
+}
+
+func newCleaner(gauges map[string]*prometheus.GaugeVec, histograms map[string]*prometheus.HistogramVec, minutes int) cleaner {
 	c := cleaner{
-		m:       &sync.Map{},
-		gauge:   gauge,
-		minutes: time.Duration(minutes),
+		m:          &sync.Map{},
+		gauges:     gauges,
+		histograms: histograms,
+		minutes:    time.Duration(minutes),
 	}
 
 	croner := cron.New()
@@ -32,8 +39,8 @@ func newCleaner(gauge *prometheus.GaugeVec, minutes int) cleaner {
 	return c
 }
 
-func (c cleaner) add(labels prometheus.Labels) {
-	bytes, err := json.Marshal(labels)
+func (c cleaner) add(metric string, labels prometheus.Labels) {
+	bytes, err := json.Marshal(metricIdentifier{name: metric, labels: labels})
 	if err != nil {
 		logrus.Errorf("marshal labels error: %v", err)
 		return
@@ -45,16 +52,22 @@ func (c cleaner) cleanup() {
 	beforeTime := time.Now().Add(-time.Minute * c.minutes)
 	tobeDeletes := make([]interface{}, 0)
 	c.m.Range(func(k, v interface{}) bool {
-		var labels prometheus.Labels
-		err := json.Unmarshal([]byte(k.(string)), &labels)
+		var metric metricIdentifier
+		err := json.Unmarshal([]byte(k.(string)), &metric)
 		if err != nil {
 			logrus.Errorf("unmarshal labels error: %v", err)
 			return true
 		}
 		updatedAt := v.(time.Time)
+
 		if updatedAt.Before(beforeTime) {
-			c.gauge.Delete(labels)
-			tobeDeletes = append(tobeDeletes, k)
+			if _, present := c.gauges[metric.name]; present {
+				c.gauges[metric.name].Delete(metric.labels)
+			}
+			if _, present := c.histograms[metric.name]; present {
+				c.histograms[metric.name].Delete(metric.labels)
+			}
+			tobeDeletes = append(tobeDeletes, metric)
 		}
 		return true
 	})

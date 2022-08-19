@@ -1,4 +1,4 @@
-FROM golang:1.15 as builder
+FROM golang:1.18 as builder
 
 LABEL VERSION=v0.11.0 \
       ARCH=AMD64 \
@@ -17,5 +17,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o druid-ex
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /go/src/druid-exporter/druid-exporter .
+COPY --from=builder /go/src/druid-exporter/dimensionMap.json .
 USER nonroot:nonroot
 ENTRYPOINT ["/druid-exporter"]

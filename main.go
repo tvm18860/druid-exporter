@@ -3,15 +3,18 @@ package main
 import (
 	"druid-exporter/collector"
 	"druid-exporter/listener"
-	"net/http"
-	"time"
-
+	"encoding/json"
 	"github.com/gorilla/mux"
 	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"io/ioutil"
+	"net/http"
+	"strings"
+	"time"
 )
 
 var (
@@ -27,36 +30,18 @@ var (
 		"log.format",
 		"Log format for druid exporter, text or json, EnvVar - LOG_FORMAT. (Default: text)",
 	).Default("text").OverrideDefaultFromEnvar("LOG_FORMAT").Short('f').String()
-	disableHistogram = kingpin.Flag(
-		"no-histogram",
-		"Flag whether to export histogram metrics or not.",
-	).Default("false").OverrideDefaultFromEnvar("NO_HISTOGRAM").Bool()
-
 	metricsCleanupTTL = kingpin.Flag(
 		"metrics-cleanup-ttl",
 		"Flag to provide time in minutes for metrics cleanup.",
 	).Default("5").OverrideDefaultFromEnvar("METRICS_CLEANUP_TTL").Int()
-	druidEmittedDataHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name: "druid_emitted_metrics_histogram",
-			Help: "Druid emitted metrics from druid emitter",
-		}, []string{"host", "metric_name", "service", "datasource", "id"},
-	)
-	druidEmittedDataGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "druid_emitted_metrics",
-			Help: "Druid emitted metrics from druid emitter",
-		}, []string{"host", "metric_name", "service", "datasource", "id"},
-	)
+	dimensionFilePath = kingpin.Flag(
+		"dimension-file-path",
+		"Path to file containing desired dimensions for emitted metrics",
+	).Default("dimensionMap.json").OverrideDefaultFromEnvar("DIMENSION_FILE_PATH").String()
 )
 
-func init() {
-	prometheus.MustRegister(druidEmittedDataHistogram)
-	prometheus.MustRegister(druidEmittedDataGauge)
-}
-
 func main() {
-	kingpin.Version("0.10")
+	kingpin.Version("0.12")
 	kingpin.Parse()
 	parsedLevel, err := logrus.ParseLevel(*logLevel)
 	if err != nil {
@@ -73,12 +58,43 @@ func main() {
 		})
 	}
 
+	druidDimensionMap := make(map[string]listener.DimensionMap)
+	file, _ := ioutil.ReadFile(*dimensionFilePath)
+	err = json.Unmarshal([]byte(file), &druidDimensionMap)
+	if err != nil {
+		logrus.Errorln(err)
+		return
+	}
+
+	druidEmittedGauges := make(map[string]*prometheus.GaugeVec)
+	druidEmittedHistograms := make(map[string]*prometheus.HistogramVec)
+	for metric, opts := range druidDimensionMap {
+		promMetric := strings.ReplaceAll(strings.ReplaceAll(metric, "/", "_"), "-", "_")
+		labels := append(opts.Dimensions, "host", "service")
+		if opts.IncludeAsHistogram {
+			vec := promauto.NewHistogramVec(
+				prometheus.HistogramOpts{
+					Name: "druid_emitted_" + promMetric,
+				}, labels,
+			)
+			druidEmittedHistograms[metric] = vec
+		} else {
+			vec := promauto.NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "druid_emitted_" + promMetric,
+				}, labels,
+			)
+			druidEmittedGauges[metric] = vec
+		}
+	}
+
 	dnsCache := cache.New(5*time.Minute, 10*time.Minute)
 	router := mux.NewRouter()
 	getDruidAPIdata := collector.Collector()
-	handlerFunc := newHandler(*getDruidAPIdata)
-	router.Handle("/druid", listener.DruidHTTPEndpoint(*metricsCleanupTTL, *disableHistogram, druidEmittedDataHistogram, druidEmittedDataGauge, dnsCache))
-	router.Handle("/metrics", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
+	prometheus.MustRegister(getDruidAPIdata)
+
+	router.Handle("/druid", listener.DruidHTTPEndpoint(druidDimensionMap, druidEmittedHistograms, druidEmittedGauges, *metricsCleanupTTL, dnsCache))
+	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
 			<head><title>Druid Exporter</title></head>
@@ -92,18 +108,4 @@ func main() {
 	logrus.Infof("Metrics endpoint - http://0.0.0.0:%v/metrics", *port)
 	logrus.Infof("Druid emitter endpoint - http://0.0.0.0:%v/druid", *port)
 	http.ListenAndServe("0.0.0.0:"+*port, router)
-}
-
-func newHandler(metrics collector.MetricCollector) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		registry := prometheus.NewRegistry()
-		getDruidAPIdata := collector.Collector()
-		registry.MustRegister(getDruidAPIdata)
-		gatherers := prometheus.Gatherers{
-			prometheus.DefaultGatherer,
-			registry,
-		}
-		h := promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{})
-		h.ServeHTTP(w, r)
-	}
 }

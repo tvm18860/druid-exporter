@@ -65,7 +65,7 @@ Flags:
   -p, --port="8080"            Port to listen druid exporter, EnvVar - PORT. (Default - 8080)
   -l, --log.level="info"       Log level for druid exporter, EnvVar - LOG_LEVEL. (Default: info)
   -f, --log.format="text"      Log format for druid exporter, text or json, EnvVar - LOG_FORMAT. (Default: text)
-      --no-histogram           Flag whether to export histogram metrics or not.
+      --dimension-file-path="dimensionMap.json" Path to file containing desired dimensions of each metric, EnvVar - DIMENSION_FILE_PATH
       --metrics-cleanup-ttl=5  Flag to provide time in minutes for metrics cleanup.
       --version                Show application version.
 ```
@@ -104,7 +104,7 @@ export PORT="8080"
 
 ### Building From Source
 
-Requires 1.13 => go version to compile code from source.
+Requires 1.18 => go version to compile code from source.
 
 ```shell
 make build-code

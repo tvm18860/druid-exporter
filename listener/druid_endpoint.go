@@ -15,12 +15,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type DimensionMap struct {
+	Dimensions         []string `json:"dimensions"`
+	IncludeAsHistogram bool     `json:"includeAsHistogram,omitempty"`
+}
+
 // DruidHTTPEndpoint is the endpoint to listen all druid metrics
-func DruidHTTPEndpoint(metricsCleanupTTL int, disableHistogram bool, histogram *prometheus.HistogramVec, gauge *prometheus.GaugeVec, dnsCache *cache.Cache) http.HandlerFunc {
-	gaugeCleaner := newCleaner(gauge, metricsCleanupTTL)
+func DruidHTTPEndpoint(dimensionMap map[string]DimensionMap, histograms map[string]*prometheus.HistogramVec, gauges map[string]*prometheus.GaugeVec, metricsCleanupTTL int, dnsCache *cache.Cache) http.HandlerFunc {
+	metricCleaner := newCleaner(gauges, histograms, metricsCleanupTTL)
 	return func(w http.ResponseWriter, req *http.Request) {
 		var druidData []map[string]interface{}
-		var id string
 		reqHeader, _ := header.ParseValueAndParams(req.Header, "Content-Type")
 		if req.Method == "POST" && reqHeader == "application/json" {
 			output, err := ioutil.ReadAll(req.Body)
@@ -45,95 +49,35 @@ func DruidHTTPEndpoint(metricsCleanupTTL int, disableHistogram bool, histogram *
 				metric := fmt.Sprintf("%v", data["metric"])
 				service := fmt.Sprintf("%v", data["service"])
 				hostname := fmt.Sprintf("%v", data["host"])
-				datasource := data["dataSource"]
 				value, _ := strconv.ParseFloat(fmt.Sprintf("%v", data["value"]), 64)
 
-				if data["id"] != nil {
-					id = fmt.Sprintf("%v", data["id"])
-				} else {
-					id = ""
-				}
 				// Reverse DNS Lookup
 				// Mutates dnsCache
 				hostValue := strings.Split(hostname, ":")[0]
 				dnsLookupValue := utils.ReverseDNSLookup(hostValue, dnsCache)
-
 				host := strings.Replace(hostname, hostValue, dnsLookupValue, 1) // Adding back port
 
 				if i == 0 { // Comment out this line if you want the whole metrics received
-					logrus.Tracef("parameters received and mapped:")
-					logrus.Tracef("    metric     => %s", metric)
-					logrus.Tracef("    service    => %s", service)
-					logrus.Tracef("    hostname   => (%s -> %s)", hostname, host)
-					logrus.Tracef("    datasource => %v", datasource)
-					logrus.Tracef("    value      => %v", value)
-					logrus.Tracef("    id         => %v", id)
+					logrus.Tracef("parameters received: %v", data)
 				}
 
-				if data["dataSource"] != nil {
-					if arrDatasource, ok := datasource.([]interface{}); ok { // Array datasource
-						for _, entryDatasource := range arrDatasource {
-							if !disableHistogram {
-								histogram.With(prometheus.Labels{
-									"metric_name": strings.ReplaceAll(metric, "/", "-"),
-									"service":     strings.ReplaceAll(service, "/", "-"),
-									"datasource":  entryDatasource.(string),
-									"host":        host,
-									"id":          id,
-								}).Observe(value)
-							}
-
-							labels := prometheus.Labels{
-								"metric_name": strings.ReplaceAll(metric, "/", "-"),
-								"service":     strings.ReplaceAll(service, "/", "-"),
-								"datasource":  entryDatasource.(string),
-								"host":        host,
-								"id":          id,
-							}
-							gaugeCleaner.add(labels)
-							gauge.With(labels).Set(value)
+				if opts, ok := dimensionMap[metric]; ok {
+					labelMap := map[string]string{"host": host, "service": service}
+					for _, l := range opts.Dimensions {
+						if data[l] != nil {
+							labelMap[l] = fmt.Sprintf("%v", data[l])
+						} else {
+							labelMap[l] = ""
 						}
-					} else { // Single datasource
-						if !disableHistogram {
-							histogram.With(prometheus.Labels{
-								"metric_name": strings.ReplaceAll(metric, "/", "-"),
-								"service":     strings.ReplaceAll(service, "/", "-"),
-								"datasource":  datasource.(string),
-								"host":        host,
-								"id":          id,
-							}).Observe(value)
-						}
-
-						labels := prometheus.Labels{
-							"metric_name": strings.ReplaceAll(metric, "/", "-"),
-							"service":     strings.ReplaceAll(service, "/", "-"),
-							"datasource":  datasource.(string),
-							"host":        host,
-							"id":          id,
-						}
-						gaugeCleaner.add(labels)
-						gauge.With(labels).Set(value)
-					}
-				} else { // Missing datasource case
-					if !disableHistogram {
-						histogram.With(prometheus.Labels{
-							"metric_name": strings.ReplaceAll(metric, "/", "-"),
-							"service":     strings.ReplaceAll(service, "/", "-"),
-							"datasource":  "",
-							"host":        host,
-							"id":          id,
-						}).Observe(value)
 					}
 
-					labels := prometheus.Labels{
-						"metric_name": strings.ReplaceAll(metric, "/", "-"),
-						"service":     strings.ReplaceAll(service, "/", "-"),
-						"datasource":  "",
-						"host":        host,
-						"id":          id,
+					if opts.IncludeAsHistogram {
+						histograms[metric].With(labelMap).Observe(value)
+						metricCleaner.add(metric, labelMap)
+					} else {
+						gauges[metric].With(labelMap).Set(value)
+						metricCleaner.add(metric, labelMap)
 					}
-					gaugeCleaner.add(labels)
-					gauge.With(labels).Set(value)
 				}
 			}
 

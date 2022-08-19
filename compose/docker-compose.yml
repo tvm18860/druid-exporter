@@ -152,12 +152,13 @@ services:
       - druid
 
   druid_exporter:
-    image: quay.io/opstree/druid-exporter:v0.10
+    image: druid-exporter
     container_name: druid_exporter
     ports:
       - "9080:8080"
     environment:
       - DRUID_URL=http://router:8888
+      - LOG_LEVEL=debug
     depends_on:
       - router
     restart: unless-stopped
@@ -179,23 +180,23 @@ services:
     networks:
       - druid
 
-  grafana:
-    depends_on:
-      - prometheus
-    image: grafana/grafana:7.1.1
-    container_name: grafana
-    user: "472"
-    ports:
-      - "3000:3000"
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=SomePassword
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_storage:/var/lib/grafana
-      - ./grafana-conf/provisioning/:/etc/grafana/provisioning/
-    networks:
-      - druid
+#  grafana:
+#    depends_on:
+#      - prometheus
+#    image: grafana/grafana:7.1.1
+#    container_name: grafana
+#    user: "472"
+#    ports:
+#      - "3000:3000"
+#    restart: unless-stopped
+#    environment:
+#      - GF_SECURITY_ADMIN_PASSWORD=SomePassword
+#      - GF_USERS_ALLOW_SIGN_UP=false
+#    volumes:
+#      - grafana_storage:/var/lib/grafana
+#      - ./grafana-conf/provisioning/:/etc/grafana/provisioning/
+#    networks:
+#      - druid
 
 networks:
   druid:
