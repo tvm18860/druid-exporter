@@ -1,6 +1,6 @@
 FROM golang:1.18 as builder
 
-LABEL VERSION=v0.11.0 \
+LABEL VERSION=v0.12.0 \
       ARCH=AMD64 \
       DESCRIPTION="A monitoring of prometheus for druid" \
       MAINTAINER="OpsTree Solutions"

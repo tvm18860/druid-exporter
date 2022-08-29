@@ -1,12 +1,8 @@
-<p align="left">
-  <img src="./static/druid-exporter-logo.svg" height="180" width="180">
-</p>
-
-[![CircleCI](https://circleci.com/gh/opstree/druid-exporter.svg?style=shield)](https://circleci.com/gh/opstree/druid-exporter)
-[![Go Report Card](https://goreportcard.com/badge/github.com/opstree/druid-exporter)](https://goreportcard.com/report/github.com/opstree/druid-exporter)
-[![Maintainability](https://api.codeclimate.com/v1/badges/f3d9db298411361ca84a/maintainability)](https://codeclimate.com/github/opstree/druid-exporter/maintainability)
-[![Docker Repository on Quay](https://img.shields.io/badge/container-ready-green "Docker Repository on Quay")](https://quay.io/repository/opstree/druid-exporter)
-[![Apache License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+This fork has the following changes from the upstream druid-exporter:
+- Set the druid metric name as the prometheus metric name rather than as a `metric_name` label
+- Allow dimensions to be configurable, similarly to the statsd emitter, through a JSON configuration file (see dimensionMap.json). This can allow users to configure the exporter to significantly reduce cardinality
+- Update to golang 1.18, bump some dependency versions
+- NOTE: The helm chart & grafana dashboard template was not updated to factor in the above changes
 
 # Druid Exporter
 

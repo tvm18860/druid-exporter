@@ -1,3 +1,8 @@
+### v0.12
+- Set the druid metric name as the prometheus metric name rather than as a `metric_name` label
+- Allow dimensions to be configurable, similarly to the statsd emitter, through a JSON configuration file (see dimensionMap.json). This can allow users to configure the exporter to significantly reduce cardinality
+- Update to golang 1.18, bump some dependency versions
+
 ### v0.11
 ##### September 19, 2021
 
