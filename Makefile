@@ -2,7 +2,7 @@
 REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/opstree
 IMAGE ?= druid-exporter
-VERSION ?= v0.12.0
+VERSION ?= v0.12.1
 
 get-depends:
 	go get -v ./...
