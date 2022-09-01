@@ -1,13 +1,13 @@
 {
-  "query/time" : { "dimensions" : ["dataSource", "type"], "includeAsHistogram" : true},
-  "query/node/time" : { "dimensions" : ["server", "status"], "includeAsHistogram" : true},
+  "query/time" : { "dimensions" : ["dataSource", "type"], "includeAsHistogram" : true, "buckets":  [ 100, 500, 1000, 5000, 10000, 60000, 180000 ] },
+  "query/node/time" : { "dimensions" : ["server", "status"], "includeAsHistogram" : true, "buckets":  [ 100, 500, 1000, 5000, 10000, 60000, 180000 ] },
   "query/node/ttfb" : { "dimensions" : ["server", "status"] },
   "query/node/backpressure": { "dimensions" : ["server", "status"] },
   "query/success/count": { "dimensions" : [] },
   "query/failed/count": { "dimensions" : [] },
   "query/interrupted/count": { "dimensions" : [] },
   "query/timeout/count": { "dimensions" : [] },
-  "query/segments/count": { "dimensions" : [], "includeAsHistogram": true },
+  "query/segments/count": { "dimensions" : [], "includeAsHistogram": true, "buckets": [ 1, 10, 100, 1000, 10000 ] },
 
   "query/segment/time" : { "dimensions" : [] },
   "query/wait/time" : { "dimensions" : [] },
@@ -63,7 +63,7 @@
   "ingest/merge/time" : { "dimensions" : ["dataSource"] },
   "ingest/merge/cpu" : { "dimensions" : ["dataSource"] },
 
-  "task/run/time" : { "dimensions" : ["dataSource", "taskType"], "includeAsHistogram": true },
+  "task/run/time" : { "dimensions" : ["dataSource", "taskType"], "includeAsHistogram": true, "buckets":  [ 1000, 10000, 60000, 300000, 600000, 3600000 ]  },
   "segment/added/bytes" : { "dimensions" : ["dataSource", "taskType"] },
   "segment/moved/bytes" : { "dimensions" : ["dataSource", "taskType"] },
   "segment/nuked/bytes" : { "dimensions" : ["dataSource", "taskType"] },

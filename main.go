@@ -74,7 +74,8 @@ func main() {
 		if opts.IncludeAsHistogram {
 			vec := promauto.NewHistogramVec(
 				prometheus.HistogramOpts{
-					Name: "druid_emitted_" + promMetric,
+					Name:    "druid_emitted_" + promMetric,
+					Buckets: opts.Buckets,
 				}, labels,
 			)
 			druidEmittedHistograms[metric] = vec

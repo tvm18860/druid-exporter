@@ -16,8 +16,9 @@ import (
 )
 
 type DimensionMap struct {
-	Dimensions         []string `json:"dimensions"`
-	IncludeAsHistogram bool     `json:"includeAsHistogram,omitempty"`
+	Dimensions         []string  `json:"dimensions"`
+	IncludeAsHistogram bool      `json:"includeAsHistogram,omitempty"`
+	Buckets            []float64 `json:"buckets,omitempty"`
 }
 
 // DruidHTTPEndpoint is the endpoint to listen all druid metrics
