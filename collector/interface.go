@@ -30,8 +30,9 @@ group by SEG.datasource, SUP.source`
 type MetricCollector struct {
 	DruidHealthStatus         *prometheus.Desc
 	DataSourceCount           *prometheus.Desc
-	DruidWorkers              *prometheus.Desc
-	DruidTasks                *prometheus.Desc
+	DruidWorkersCapacityMax   *prometheus.Desc
+	DruidWorkersCapacityUsed  *prometheus.Desc
+	DruidTaskStuckRuntime     *prometheus.Desc
 	DruidSupervisors          *prometheus.Desc
 	DruidSegmentCount         *prometheus.Desc
 	DruidSegmentSize          *prometheus.Desc

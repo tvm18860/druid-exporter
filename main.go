@@ -93,6 +93,7 @@ func main() {
 	router := mux.NewRouter()
 	getDruidAPIdata := collector.Collector()
 	prometheus.MustRegister(getDruidAPIdata)
+	prometheus.MustRegister(collector.DruidTaskDurationHist)
 
 	router.Handle("/druid", listener.DruidHTTPEndpoint(druidDimensionMap, druidEmittedHistograms, druidEmittedGauges, *metricsCleanupTTL, dnsCache))
 	router.Handle("/metrics", promhttp.Handler())

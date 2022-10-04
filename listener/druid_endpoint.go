@@ -48,21 +48,21 @@ func DruidHTTPEndpoint(dimensionMap map[string]DimensionMap, histograms map[stri
 			}
 			for i, data := range druidData {
 				metric := fmt.Sprintf("%v", data["metric"])
-				service := fmt.Sprintf("%v", data["service"])
-				hostname := fmt.Sprintf("%v", data["host"])
-				value, _ := strconv.ParseFloat(fmt.Sprintf("%v", data["value"]), 64)
-
-				// Reverse DNS Lookup
-				// Mutates dnsCache
-				hostValue := strings.Split(hostname, ":")[0]
-				dnsLookupValue := utils.ReverseDNSLookup(hostValue, dnsCache)
-				host := strings.Replace(hostname, hostValue, dnsLookupValue, 1) // Adding back port
-
-				if i == 0 { // Comment out this line if you want the whole metrics received
-					logrus.Tracef("parameters received: %v", data)
-				}
-
 				if opts, ok := dimensionMap[metric]; ok {
+					service := fmt.Sprintf("%v", data["service"])
+					hostname := fmt.Sprintf("%v", data["host"])
+					value, _ := strconv.ParseFloat(fmt.Sprintf("%v", data["value"]), 64)
+
+					// Reverse DNS Lookup
+					// Mutates dnsCache
+					hostValue := strings.Split(hostname, ":")[0]
+					dnsLookupValue := utils.ReverseDNSLookup(hostValue, dnsCache)
+					host := strings.Replace(hostname, hostValue, dnsLookupValue, 1) // Adding back port
+
+					if i == 0 {
+						logrus.Tracef("parameters received: %v", data)
+					}
+
 					labelMap := map[string]string{"host": host, "service": service}
 					for _, l := range opts.Dimensions {
 						if data[l] != nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -16,6 +17,20 @@ var (
 		"druid.uri",
 		"URL of druid router or coordinator, EnvVar - DRUID_URL",
 	).Default("http://druid.opstreelabs.in").OverrideDefaultFromEnvar("DRUID_URL").Short('d').String()
+
+	druidTaskStuckThresholdMinutes = kingpin.Flag(
+		"druid.stuck.task.threshold.minutes",
+		"Threshold in minutes to consider a task stuck, EnvVar - DRUID_STUCK_TASK_THRESHOLD_MINUTES",
+	).Default("90").OverrideDefaultFromEnvar("DRUID_STUCK_TASK_THRESHOLD_MINUTES").Float()
+
+	DruidTaskDurationHist = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "druid_task_duration_ms",
+			Help:    "Histogram of druid task durations",
+			Buckets: []float64{100, 500, 1000, 10000, 60000, 600000, 3600000},
+		},
+		[]string{"datasource", "status", "task_type"},
+	)
 )
 
 // GetDruidHealthMetrics returns the set of metrics for druid
@@ -154,8 +169,9 @@ func (collector *MetricCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- collector.DruidSupervisors
 	ch <- collector.DruidSegmentCount
 	ch <- collector.DruidSegmentSize
-	ch <- collector.DruidWorkers
-	ch <- collector.DruidTasks
+	ch <- collector.DruidWorkersCapacityMax
+	ch <- collector.DruidWorkersCapacityUsed
+	ch <- collector.DruidTaskStuckRuntime
 	ch <- collector.DruidSegmentReplicateSize
 	ch <- collector.DruidRunningTasks
 	ch <- collector.DruidWaitingTasks
@@ -176,13 +192,17 @@ func Collector() *MetricCollector {
 			"Datasources present",
 			[]string{"datasource"}, nil,
 		),
-		DruidWorkers: prometheus.NewDesc("druid_workers_capacity_used",
-			"Druid workers capacity used",
-			[]string{"pod", "version", "ip"}, nil,
+		DruidWorkersCapacityMax: prometheus.NewDesc("druid_workers_capacity_max",
+			"Druid workers capacity max",
+			[]string{"version", "ip"}, nil,
 		),
-		DruidTasks: prometheus.NewDesc("druid_tasks_duration",
-			"Druid tasks duration and state",
-			[]string{"pod", "datasource", "task_id", "groupd_id", "task_status", "created_time"}, nil,
+		DruidWorkersCapacityUsed: prometheus.NewDesc("druid_workers_capacity_used",
+			"Druid workers capacity used",
+			[]string{"version", "ip"}, nil,
+		),
+		DruidTaskStuckRuntime: prometheus.NewDesc("druid_task_stuck_runtime_ms",
+			"Druid task runtime by task id for long running tasks",
+			[]string{"datasource", "task_type", "task_id"}, nil,
 		),
 		DruidSupervisors: prometheus.NewDesc("druid_supervisors",
 			"Druid supervisors status",
@@ -255,8 +275,10 @@ func (collector *MetricCollector) Collect(ch chan<- prometheus.Metric) {
 	workers := getDruidWorkersData(workersURL)
 
 	for _, worker := range workers {
-		ch <- prometheus.MustNewConstMetric(collector.DruidWorkers,
-			prometheus.GaugeValue, float64(worker.CurrCapacityUsed), worker.hostname(), worker.Worker.Version, worker.Worker.IP)
+		ch <- prometheus.MustNewConstMetric(collector.DruidWorkersCapacityMax,
+			prometheus.GaugeValue, float64(worker.Worker.Capacity), worker.Worker.Version, worker.Worker.IP)
+		ch <- prometheus.MustNewConstMetric(collector.DruidWorkersCapacityUsed,
+			prometheus.GaugeValue, float64(worker.CurrCapacityUsed), worker.Worker.Version, worker.Worker.IP)
 	}
 
 	for _, data := range GetDruidTasksData(tasksURL) {
@@ -277,8 +299,23 @@ func (collector *MetricCollector) Collect(ch chan<- prometheus.Metric) {
 				hostname = workers[rand.Intn(len(workers))].hostname()
 			}
 		}
-		ch <- prometheus.MustNewConstMetric(collector.DruidTasks,
-			prometheus.GaugeValue, data.Duration, hostname, data.DataSource, data.ID, data.GroupID, data.Status, data.CreatedTime)
+
+		DruidTaskDurationHist.WithLabelValues(data.DataSource, data.Status, data.Type).Observe(data.Duration)
+
+		// Check for long-running, potentially stuck tasks
+		if data.Status == "RUNNING" {
+			taskStartTime, err := time.Parse("2006-01-02T15:04:05.000Z", data.CreatedTime)
+
+			if err != nil {
+				logrus.Warnf("Unable to parse task start time of " + data.CreatedTime)
+			} else {
+				runtimeMinutes := time.Now().UTC().Sub(taskStartTime).Minutes()
+				if runtimeMinutes >= *druidTaskStuckThresholdMinutes {
+					ch <- prometheus.MustNewConstMetric(collector.DruidTaskStuckRuntime,
+						prometheus.GaugeValue, runtimeMinutes, data.DataSource, data.ID)
+				}
+			}
+		}
 	}
 
 	for _, data := range GetDruidData(supervisorURL) {
