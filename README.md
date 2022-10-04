@@ -1,5 +1,6 @@
 This fork has the following changes from the upstream druid-exporter:
 - Set the druid metric name as the prometheus metric name rather than as a `metric_name` label
+- Change how task duration metrics are gathered, using a histogram instead of high cardinality task ids
 - Allow dimensions to be configurable, similarly to the statsd emitter, through a JSON configuration file (see dimensionMap.json). This can allow users to configure the exporter to significantly reduce cardinality
 - Update to golang 1.18, bump some dependency versions
 - NOTE: The helm chart & grafana dashboard template was not updated to factor in the above changes
