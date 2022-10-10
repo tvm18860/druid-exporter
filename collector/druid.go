@@ -312,7 +312,7 @@ func (collector *MetricCollector) Collect(ch chan<- prometheus.Metric) {
 				runtimeMinutes := time.Now().UTC().Sub(taskStartTime).Minutes()
 				if runtimeMinutes >= *druidTaskStuckThresholdMinutes {
 					ch <- prometheus.MustNewConstMetric(collector.DruidTaskStuckRuntime,
-						prometheus.GaugeValue, runtimeMinutes, data.DataSource, data.ID)
+						prometheus.GaugeValue, runtimeMinutes, data.DataSource, data.Type, data.ID)
 				}
 			}
 		}
